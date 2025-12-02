@@ -209,6 +209,7 @@ app.post('/admin/verify', (req, res) => {
   try {
     const password = (req.body && req.body.password) || '';
     const expected = process.env.ADMIN_PANEL_PASSWORD || 'admin1234';
+    console.log(`Auth attempt: received="${password}" expected="${expected}" match=${password === expected}`);
     if (password && password === expected) {
       // create a short-lived session and set an HttpOnly cookie
       try {
