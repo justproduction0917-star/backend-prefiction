@@ -18,9 +18,15 @@ if (!mongoUri) {
 }
 mongoose.connect(mongoUri, {
   useNewUrlParser: true,
-  useUnifiedTopology: true
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  family: 4
 }).then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch(err => {
+    console.error('MongoDB connection error:', err.message);
+    console.error('URI:', mongoUri.split('@')[0] + '@****'); // Log URI without password
+  });
 const port = process.env.PORT || 3000;
 
 // Basic middleware with CSP configured for external scripts and inline handlers
@@ -52,6 +58,19 @@ app.use(express.static(path.join(__dirname)));
 
 // Simple health check
 app.get('/_health', (req, res) => res.send({ ok: true }));
+
+// Database connection status endpoint
+app.get('/api/status', (req, res) => {
+  const status = {
+    ok: true,
+    timestamp: new Date().toISOString(),
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  };
+  if (mongoose.connection.readyState !== 1) {
+    status.ok = false;
+  }
+  res.json(status);
+});
 
 // POST endpoint to receive contact form submissions
 app.post('/api/contact', async (req, res) => {
@@ -121,22 +140,28 @@ function requireAdminAuth(req, res, next) {
 
 app.get('/admin/submissions', requireAdminAuth, async (req, res) => {
   try {
-    const rows = await Submission.find().sort({ createdAt: -1 });
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ error: 'database not connected' });
+    }
+    const rows = await Submission.find().sort({ createdAt: -1 }).exec();
     res.json({ rows });
   } catch (err) {
-    console.error('DB read failed', err);
-    res.status(500).json({ error: 'internal server error' });
+    console.error('DB read failed', err.message);
+    res.status(500).json({ error: 'database error', message: err.message });
   }
 });
 
 // Some hosts/proxies may block GET requests to API-like paths; accept POST as a mirror for compatibility
 app.post('/admin/submissions', requireAdminAuth, async (req, res) => {
   try {
-    const rows = await Submission.find().sort({ createdAt: -1 });
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ error: 'database not connected' });
+    }
+    const rows = await Submission.find().sort({ createdAt: -1 }).exec();
     res.json({ rows });
   } catch (err) {
-    console.error('DB read failed (POST mirror)', err);
-    res.status(500).json({ error: 'internal server error' });
+    console.error('DB read failed (POST mirror)', err.message);
+    res.status(500).json({ error: 'database error', message: err.message });
   }
 });
 
