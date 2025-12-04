@@ -349,6 +349,29 @@
       loginError.textContent = '';
     }
 
+    function sendAdminAccessNotification() {
+      const notificationData = {
+        ip: 'detected',
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString()
+      };
+
+      fetch('/api/admin-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notificationData)
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          console.log('✅ Admin access notification sent');
+        } else {
+          console.log('⚠️ Notification failed:', data.error);
+        }
+      })
+      .catch(err => console.error('Notification error:', err));
+    }
+
     loginBtn.addEventListener('click', async () => {
       const password = adminPassword.value.trim();
       if (!password) {
@@ -371,6 +394,9 @@
           loginModal.style.display = 'none';
           adminPanel.style.display = 'block';
           adminPassword.value = '';
+          
+          // Send admin access notification
+          sendAdminAccessNotification();
         } else {
           showLoginError('❌ Incorrect password. Try again.');
           adminPassword.value = '';

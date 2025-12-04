@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const Submission = require('./models/Submission');
 const path = require('path');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const app = express();
 
@@ -32,6 +33,24 @@ mongoose.connect(mongoUri, {
   });
 const port = process.env.PORT || 3000;
 
+// Email transporter setup
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER || 'theprefictionsolution@gmail.com',
+    pass: process.env.GMAIL_PASSWORD || process.env.GMAIL_APP_PASSWORD
+  }
+});
+
+// Verify transporter connection
+transporter.verify((error, success) => {
+  if (error) {
+    console.log('Email service error:', error.message);
+  } else {
+    console.log('Email service ready');
+  }
+});
+
 // Basic middleware with CSP configured for external scripts and inline handlers
 app.use(helmet({
   contentSecurityPolicy: {
@@ -53,7 +72,7 @@ app.use(express.urlencoded({ extended: false }));
 // CORS configuration with explicit origin matching
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = ['https://prefic-frontend-1.vercel.app', 'http://localhost:3000', 'http://localhost:5173'];
+    const allowedOrigins = ['https://prefiction-fronted.vercel.app', 'http://localhost:3000', 'http://localhost:5173'];
     // Allow requests with no origin (like mobile apps or curl requests)
     // Allow all Vercel deployments
     if (!origin || origin.includes('vercel.app') || allowedOrigins.indexOf(origin) !== -1) {
@@ -252,6 +271,55 @@ app.post('/admin/logout', (req, res) => {
     return res.json({ ok: true });
   } catch (err) {
     console.error('Logout error', err);
+    return res.status(500).json({ error: 'internal server error' });
+  }
+});
+
+// Admin access notification endpoint
+app.post('/api/admin-access', (req, res) => {
+  try {
+    const { ip, userAgent, timestamp } = req.body;
+    const clientIp = ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    
+    const mailOptions = {
+      from: process.env.GMAIL_USER || 'theprefictionsolution@gmail.com',
+      to: 'justproduction0917@gmail.com',
+      subject: '🔐 Admin Panel Access Notification',
+      html: `
+        <div style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+          <div style="background: white; border-radius: 8px; padding: 20px; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #e74c3c; margin-top: 0;">⚠️ Admin Panel Accessed</h2>
+            <p style="color: #333; font-size: 16px;">Someone has accessed your admin panel.</p>
+            
+            <div style="background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 10px 0;"><strong>IP Address:</strong> ${clientIp}</p>
+              <p style="margin: 10px 0;"><strong>Time:</strong> ${new Date(timestamp).toLocaleString()}</p>
+              <p style="margin: 10px 0;"><strong>Device:</strong> ${userAgent || 'Unknown'}</p>
+            </div>
+            
+            <p style="color: #666; font-size: 14px;">
+              If this wasn't you, please check your account security immediately.
+            </p>
+            
+            <div style="border-top: 1px solid #ecf0f1; margin-top: 20px; padding-top: 20px; color: #999; font-size: 12px;">
+              <p>This is an automated notification from your Prefiction admin system.</p>
+            </div>
+          </div>
+        </div>
+      `
+    };
+    
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.log('Email sending error:', error);
+        return res.status(500).json({ success: false, error: error.message });
+      } else {
+        console.log('Admin access notification sent:', info.response);
+        return res.json({ success: true, message: 'Notification sent' });
+      }
+    });
+  } catch (err) {
+    console.error('Admin access notification error', err);
     return res.status(500).json({ error: 'internal server error' });
   }
 });
