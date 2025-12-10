@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const mongoose = require('mongoose');
 const Submission = require('./models/Submission');
+const Admin = require('./models/Admin');
 const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
@@ -228,11 +229,27 @@ app.delete('/admin/submissions/:id', requireAdminAuth, async (req, res) => {
   }
 });
 
+// Function to get admin password from MongoDB or environment
+async function getAdminPassword() {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const adminSettings = await Admin.findOne({ key: 'admin_settings' });
+      if (adminSettings && adminSettings.password) {
+        return adminSettings.password;
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching admin password from DB:', err.message);
+  }
+  // Fallback to environment variable
+  return process.env.ADMIN_PANEL_PASSWORD || '57d3e160e7b006b0359fa54440799a6b';
+}
+
 // Verify admin password (used by client-side login modal)
-app.post('/admin/verify', (req, res) => {
+app.post('/admin/verify', async (req, res) => {
   try {
     const password = (req.body && req.body.password) || '';
-    const expected = process.env.ADMIN_PANEL_PASSWORD || '57d3e160e7b006b0359fa54440799a6b';
+    const expected = await getAdminPassword();
     if (password && password === expected) {
       // create a short-lived session and set an HttpOnly cookie
       try {
@@ -258,11 +275,12 @@ app.post('/admin/verify', (req, res) => {
   }
 });
 
+
 // Change admin password endpoint
-app.post('/admin/change-password', requireAdminAuth, (req, res) => {
+app.post('/admin/change-password', requireAdminAuth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    const expectedPassword = process.env.ADMIN_PANEL_PASSWORD || '57d3e160e7b006b0359fa54440799a6b';
+    const expectedPassword = await getAdminPassword();
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: 'Current and new password required' });
@@ -279,12 +297,19 @@ app.post('/admin/change-password', requireAdminAuth, (req, res) => {
     // Update the environment variable
     process.env.ADMIN_PANEL_PASSWORD = newPassword;
     
-    // Also update the .env file for persistence (optional, for development)
-    const fs = require('fs');
-    const envPath = path.join(__dirname, '.env');
-    let envContent = fs.readFileSync(envPath, 'utf8');
-    envContent = envContent.replace(/ADMIN_PANEL_PASSWORD=.*/g, `ADMIN_PANEL_PASSWORD=${newPassword}`);
-    fs.writeFileSync(envPath, envContent, 'utf8');
+    // Persist to MongoDB for permanent storage across deployments
+    if (mongoose.connection.readyState === 1) {
+      try {
+        await Admin.findOneAndUpdate(
+          { key: 'admin_settings' },
+          { password: newPassword, updatedAt: new Date() },
+          { upsert: true, new: true }
+        );
+        console.log('Admin password updated in database');
+      } catch (dbErr) {
+        console.error('Failed to update password in database:', dbErr.message);
+      }
+    }
     
     // Clear all sessions to force re-login
     SESSIONS.clear();
