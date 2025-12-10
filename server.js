@@ -232,7 +232,7 @@ app.delete('/admin/submissions/:id', requireAdminAuth, async (req, res) => {
 app.post('/admin/verify', (req, res) => {
   try {
     const password = (req.body && req.body.password) || '';
-    const expected = '57d3e160e7b006b0359fa54440799a6b'; // hardcoded for production
+    const expected = process.env.ADMIN_PANEL_PASSWORD || '57d3e160e7b006b0359fa54440799a6b';
     if (password && password === expected) {
       // create a short-lived session and set an HttpOnly cookie
       try {
@@ -254,6 +254,45 @@ app.post('/admin/verify', (req, res) => {
     return res.status(401).json({ error: 'unauthorized' });
   } catch (err) {
     console.error('Verify endpoint error', err);
+    return res.status(500).json({ error: 'internal server error' });
+  }
+});
+
+// Change admin password endpoint
+app.post('/admin/change-password', requireAdminAuth, (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const expectedPassword = process.env.ADMIN_PANEL_PASSWORD || '57d3e160e7b006b0359fa54440799a6b';
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password required' });
+    }
+
+    if (currentPassword !== expectedPassword) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    // Update the environment variable
+    process.env.ADMIN_PANEL_PASSWORD = newPassword;
+    
+    // Also update the .env file for persistence (optional, for development)
+    const fs = require('fs');
+    const envPath = path.join(__dirname, '.env');
+    let envContent = fs.readFileSync(envPath, 'utf8');
+    envContent = envContent.replace(/ADMIN_PANEL_PASSWORD=.*/g, `ADMIN_PANEL_PASSWORD=${newPassword}`);
+    fs.writeFileSync(envPath, envContent, 'utf8');
+    
+    // Clear all sessions to force re-login
+    SESSIONS.clear();
+    
+    res.clearCookie('admin_sid', { httpOnly: true, sameSite: 'lax' });
+    return res.json({ ok: true, message: 'Password changed successfully. Please log in again.' });
+  } catch (err) {
+    console.error('Change password error', err);
     return res.status(500).json({ error: 'internal server error' });
   }
 });

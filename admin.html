@@ -45,13 +45,77 @@
     </div>
   </div>
 
+  <!-- Change Password Modal -->
+  <div id="changePasswordModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+    <div class="glass-panel rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+      <h2 class="text-2xl font-bold text-gray-800 mb-2">🔑 Change Admin Password</h2>
+      <p class="text-gray-600 mb-6">Enter your new password below</p>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
+        <input 
+          id="currentPassword" 
+          type="password" 
+          placeholder="Enter current password" 
+          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
+        <input 
+          id="newPassword" 
+          type="password" 
+          placeholder="Enter new password" 
+          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Confirm New Password</label>
+        <input 
+          id="confirmPassword" 
+          type="password" 
+          placeholder="Confirm new password" 
+          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+      
+      <div id="changePasswordError" class="mb-4 p-3 rounded-lg hidden bg-red-50 text-red-600 text-sm"></div>
+      <div id="changePasswordSuccess" class="mb-4 p-3 rounded-lg hidden bg-green-50 text-green-600 text-sm"></div>
+      
+      <div class="flex gap-3">
+        <button 
+          id="changePasswordBtn"
+          class="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-lg transition duration-200 shadow-lg"
+        >
+          Update Password
+        </button>
+        <button 
+          id="cancelChangePasswordBtn"
+          class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-3 rounded-lg transition duration-200"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Admin Panel (hidden until login) -->
   <div id="adminPanel" style="display: none;">
   <div class="max-w-6xl mx-auto">
     <!-- Header -->
-    <div class="mb-8 text-white">
-      <h1 class="text-4xl font-bold mb-2">📊 Submissions Admin</h1>
-      <p class="text-blue-100">Manage and view all contact form submissions</p>
+    <div class="mb-8 text-white flex justify-between items-center">
+      <div>
+        <h1 class="text-4xl font-bold mb-2">📊 Submissions Admin</h1>
+        <p class="text-blue-100">Manage and view all contact form submissions</p>
+      </div>
+      <button 
+        id="changePasswordHeaderBtn"
+        class="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-4 py-2 rounded-lg transition duration-200 shadow-lg"
+      >
+        🔑 Change Password
+      </button>
     </div>
 
     <!-- Control Panel -->
@@ -420,6 +484,116 @@
     // Focus on password field on load
     window.addEventListener('load', () => {
       adminPassword.focus();
+    });
+
+    // Change Password Feature
+    const changePasswordModal = document.getElementById('changePasswordModal');
+    const changePasswordHeaderBtn = document.getElementById('changePasswordHeaderBtn');
+    const changePasswordBtn = document.getElementById('changePasswordBtn');
+    const cancelChangePasswordBtn = document.getElementById('cancelChangePasswordBtn');
+    const currentPasswordInput = document.getElementById('currentPassword');
+    const newPasswordInput = document.getElementById('newPassword');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
+    const changePasswordError = document.getElementById('changePasswordError');
+    const changePasswordSuccess = document.getElementById('changePasswordSuccess');
+
+    function showChangePasswordError(msg) {
+      changePasswordError.textContent = msg;
+      changePasswordError.classList.remove('hidden');
+      changePasswordSuccess.classList.add('hidden');
+    }
+
+    function showChangePasswordSuccess(msg) {
+      changePasswordSuccess.textContent = msg;
+      changePasswordSuccess.classList.remove('hidden');
+      changePasswordError.classList.add('hidden');
+    }
+
+    function hideChangePasswordMessages() {
+      changePasswordError.classList.add('hidden');
+      changePasswordSuccess.classList.add('hidden');
+    }
+
+    changePasswordHeaderBtn.addEventListener('click', () => {
+      changePasswordModal.classList.remove('hidden');
+      hideChangePasswordMessages();
+      currentPasswordInput.value = '';
+      newPasswordInput.value = '';
+      confirmPasswordInput.value = '';
+      currentPasswordInput.focus();
+    });
+
+    cancelChangePasswordBtn.addEventListener('click', () => {
+      changePasswordModal.classList.add('hidden');
+      hideChangePasswordMessages();
+    });
+
+    changePasswordBtn.addEventListener('click', async () => {
+      const currentPassword = currentPasswordInput.value.trim();
+      const newPassword = newPasswordInput.value.trim();
+      const confirmPassword = confirmPasswordInput.value.trim();
+
+      if (!currentPassword) {
+        showChangePasswordError('❌ Current password is required');
+        return;
+      }
+
+      if (!newPassword) {
+        showChangePasswordError('❌ New password is required');
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        showChangePasswordError('❌ New password must be at least 6 characters');
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        showChangePasswordError('❌ New passwords do not match');
+        return;
+      }
+
+      changePasswordBtn.disabled = true;
+      changePasswordBtn.textContent = 'Updating...';
+
+      try {
+        const resp = await fetch('/admin/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ 
+            currentPassword, 
+            newPassword 
+          })
+        });
+
+        if (resp.ok) {
+          showChangePasswordSuccess('✅ Password changed successfully! Please log in again.');
+          setTimeout(() => {
+            changePasswordModal.classList.add('hidden');
+            loginModal.style.display = 'flex';
+            adminPanel.style.display = 'none';
+            adminPassword.value = '';
+            adminPassword.focus();
+          }, 2000);
+        } else {
+          const data = await resp.json();
+          showChangePasswordError(data.error || '❌ Failed to change password');
+        }
+      } catch (err) {
+        console.error('Change password error', err);
+        showChangePasswordError('❌ Server error. Please try again later.');
+      } finally {
+        changePasswordBtn.disabled = false;
+        changePasswordBtn.textContent = 'Update Password';
+      }
+    });
+
+    // Allow Enter key to submit change password
+    confirmPasswordInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        changePasswordBtn.click();
+      }
     });
   </script>
   </div>
